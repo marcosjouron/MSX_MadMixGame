@@ -1266,28 +1266,28 @@ GESTIONAR_SCROLL:
     LD     HL,(REGISTRO_NIVEL_POSICION_COMECOCOS) ; HL = posicion de camara (H=eje horizontal, L=eje vertical)
     LD     C,A                    ; guarda el parametro de entrada (valor recibido por GESTIONAR_SCROLL)
     LD     A,L
-    AND    $03                    ; prueba los 2 bits bajos de L (sub-pixel vertical)
+    AND    $03                    ; prueba los 2 bits bajos de L (sub-pixel horizontal X)
     JR     Z,.COMPROBAR_EJE_Y
     LD     A,C
     AND    $03                    ; enmascara C a sus 2 bits bajos
     LD     C,A
 .COMPROBAR_EJE_Y:
     LD     A,H
-    AND    $03                    ; prueba los 2 bits bajos de H (sub-pixel horizontal)
+    AND    $03                    ; prueba los 2 bits bajos de H (sub-pixel vertical Y)
     LD     A,C
     JR     Z,.DECIDIR_DIRECCION_SCROLL
     AND    $0C                    ; enmascara C a sus bits 2-3
 .DECIDIR_DIRECCION_SCROLL:
-    RRA
-    JP     C,SCROLL_ARRIBA
-    RRA
+    RRA                            ; Bit 0 = 1 derecha
+    JP     C,SCROLL_DERECHA
+    RRA                            ; Bit 1 = 1 izquierda
+    JP     C,SCROLL_IZQUIERDA
+    RRA                            ; Bit 2 = 1 abajo
     JP     C,SCROLL_ABAJO
     RRA
-    JP     C,SCROLL_DERECHA
-    RRA
     RET    NC                     ; ningun bit activo: no hace falta scroll
-SCROLL_IZQUIERDA:                ; CONFIRMADO EN VIVO: resta 1 a REGISTRO_NIVEL_POSICION_COMECOCOS.H al final (ver APLICAR_DESPLAZAMIENTO_LATERAL) -- verificado con openMSX jugando en las 4 direcciones, agosto 2026, ver FINDINGS.md
-    LD     HL,$0400                        ; delta empaquetado (H=$04=+4 horizontal, L=0)
+SCROLL_ARRIBA:
+    LD     HL,$0400                        ; delta empaquetado (H=$04=+4 vertical, L=0)
     LD     (PARAMETRO_DESPLAZAMIENTO_SCROLL),HL
     LD     HL,BUFFER_LOSETAS_TRABAJO       ; puntero base, se guarda para el bucle de filas
     PUSH   HL
@@ -1304,7 +1304,7 @@ SCROLL_IZQUIERDA:                ; CONFIRMADO EN VIVO: resta 1 a REGISTRO_NIVEL_
     ADD    HL,BC
     ADD    HL,BC                          ; HL = BUFFER_LOSETAS_TRABAJO+4448 (fila 139)
     JR     APLICAR_DESPLAZAMIENTO_LATERAL
-SCROLL_DERECHA:                  ; CONFIRMADO EN VIVO: suma 1 a REGISTRO_NIVEL_POSICION_COMECOCOS.H al final (ver APLICAR_DESPLAZAMIENTO_LATERAL) -- verificado con openMSX jugando en las 4 direcciones, agosto 2026, ver FINDINGS.md
+SCROLL_ABAJO:                  
     LD     HL,$FC00                        ; delta empaquetado (H=$FC=-4 horizontal, L=0)
     LD     (PARAMETRO_DESPLAZAMIENTO_SCROLL),HL
     LD     HL,BUFFER_LOSETAS_TRABAJO+4480  ; = $EF84: fila 140 del lienzo (4480/32=140)
@@ -1414,7 +1414,7 @@ DIBUJAR_FILA_LOSETAS_BUFFER_VRAM:
     JR     NZ,.BUCLE_LOSETAS_FILA
     LD     DE,(PARAMETRO_DESPLAZAMIENTO_SCROLL)
     RET
-SCROLL_ABAJO:                    ; desplaza el lienzo BUFFER_LOSETAS_TRABAJO 4px hacia abajo (144 filas x 24 RRD encadenados por fila) y actualiza PARAMETRO_DESPLAZAMIENTO_SCROLL/REGISTRO_NIVEL_POSICION_COMECOCOS
+SCROLL_IZQUIERDA:                    ; desplaza el lienzo BUFFER_LOSETAS_TRABAJO 4px hacia abajo (144 filas x 24 RRD encadenados por fila) y actualiza PARAMETRO_DESPLAZAMIENTO_SCROLL/REGISTRO_NIVEL_POSICION_COMECOCOS
     LD     HL,$0004                        ; delta empaquetado (H=0 horizontal, L=$04=+4 vertical)
     LD     (PARAMETRO_DESPLAZAMIENTO_SCROLL),HL
     EXX                                    ; cambia al banco alternativo para preparar C/D, consumidos mas tarde en SCROLL_LOSETA_BUFFER_VRAM
@@ -1427,11 +1427,11 @@ SCROLL_ABAJO:                    ; desplaza el lienzo BUFFER_LOSETAS_TRABAJO 4px
     PUSH   AF                              ; guarda el flag de direccion para usarlo mas tarde en SCROLL_LOSETA_BUFFER_VRAM
     LD     DE,32                  ; paso entre filas del lienzo (ancho de fila de BUFFER_LOSETAS_TRABAJO)
     LD     C,144                  ; contador del bucle externo: 144 filas del lienzo
-.BUCLE_FILA_SCROLL_ABAJO:        ; recorre las 144 filas del lienzo (DEC C/JR NZ); por fila: guarda el puntero, resetea A (nibble de acarreo) y llama al bucle de nibbles
+.BUCLE_FILA_SCROLL_IZQUIERDA:     ; recorre las 144 filas del lienzo (DEC C/JR NZ); por fila: guarda el puntero, resetea A (nibble de acarreo) y llama al bucle de nibbles
     PUSH   HL                     ; guarda el puntero de inicio de esta fila
     XOR    A                      ; A=0: nibble de acarreo inicial para esta fila
     LD     B,2                    ; contador del bucle interno: 2 vueltas x 12 pares RRD/INC L = 24 RRD por fila
-.BUCLE_NIBBLE_SCROLL_ABAJO:      ; 24 RRD encadenados (INC L entre cada uno), A como nibble de acarreo entre bytes -- propaga el scroll fino de 4px a lo largo de la fila
+.BUCLE_NIBBLE_SCROLL_IZQUIERDA:   ; 24 RRD encadenados (INC L entre cada uno), A como nibble de acarreo entre bytes -- propaga el scroll fino de 4px a lo largo de la fila
     RRD
     INC    L
     RRD
@@ -1456,13 +1456,13 @@ SCROLL_ABAJO:                    ; desplaza el lienzo BUFFER_LOSETAS_TRABAJO 4px
     INC    L
     RRD
     INC    L
-    DJNZ   .BUCLE_NIBBLE_SCROLL_ABAJO
+    DJNZ   .BUCLE_NIBBLE_SCROLL_IZQUIERDA
     POP    HL
     ADD    HL,DE
     DEC    C
-    JR     NZ,.BUCLE_FILA_SCROLL_ABAJO
+    JR     NZ,.BUCLE_FILA_SCROLL_IZQUIERDA
     JR     SCROLL_LOSETA_BUFFER_VRAM
-SCROLL_ARRIBA:                   ; desplaza el lienzo BUFFER_LOSETAS_TRABAJO 4px hacia arriba (144 filas x 24 RLD encadenados por fila) y actualiza PARAMETRO_DESPLAZAMIENTO_SCROLL/REGISTRO_NIVEL_POSICION_COMECOCOS
+SCROLL_DERECHA:                   ; desplaza el lienzo BUFFER_LOSETAS_TRABAJO 4px hacia arriba (144 filas x 24 RLD encadenados por fila) y actualiza PARAMETRO_DESPLAZAMIENTO_SCROLL/REGISTRO_NIVEL_POSICION_COMECOCOS
     LD     HL,$00FC                        ; delta empaquetado (H=0 horizontal, L=$FC=-4 vertical)
     LD     (PARAMETRO_DESPLAZAMIENTO_SCROLL),HL
     EXX                                    ; cambia al banco alternativo para preparar C/D, consumidos mas tarde en SCROLL_LOSETA_BUFFER_VRAM
@@ -1475,11 +1475,11 @@ SCROLL_ARRIBA:                   ; desplaza el lienzo BUFFER_LOSETAS_TRABAJO 4px
     PUSH   AF
     LD     DE,32                  ; paso entre filas del lienzo (ancho de fila de BUFFER_LOSETAS_TRABAJO)
     LD     C,144                  ; contador del bucle externo: 144 filas del lienzo
-.BUCLE_FILA_SCROLL_ARRIBA:       ; recorre las 144 filas del lienzo (DEC C/JP NZ); por fila: guarda el puntero, resetea A (nibble de acarreo) y llama al bucle de nibbles
+.BUCLE_FILA_SCROLL_DERECHA:       ; recorre las 144 filas del lienzo (DEC C/JP NZ); por fila: guarda el puntero, resetea A (nibble de acarreo) y llama al bucle de nibbles
     PUSH   HL                     ; guarda el puntero de inicio de esta fila
     XOR    A                      ; A=0: nibble de acarreo inicial para esta fila
     LD     B,2                    ; contador del bucle interno: 2 vueltas x 12 pares RLD/DEC L = 24 RLD por fila
-.BUCLE_NIBBLE_SCROLL_ARRIBA:     ; 24 RLD encadenados (DEC L entre cada uno, sentido contrario a SCROLL_ABAJO), A como nibble de acarreo -- propaga el scroll fino de 4px a lo largo de la fila
+.BUCLE_NIBBLE_SCROLL_DERECHA:     ; 24 RLD encadenados (DEC L entre cada uno, sentido contrario a SCROLL_ABAJO), A como nibble de acarreo -- propaga el scroll fino de 4px a lo largo de la fila
     RLD
     DEC    L
     RLD
@@ -1504,11 +1504,11 @@ SCROLL_ARRIBA:                   ; desplaza el lienzo BUFFER_LOSETAS_TRABAJO 4px
     DEC    L
     RLD
     DEC    L
-    DJNZ   .BUCLE_NIBBLE_SCROLL_ARRIBA
+    DJNZ   .BUCLE_NIBBLE_SCROLL_DERECHA
     POP    HL
     ADD    HL,DE
     DEC    C
-    JP     NZ,.BUCLE_FILA_SCROLL_ARRIBA
+    JP     NZ,.BUCLE_FILA_SCROLL_DERECHA
 SCROLL_LOSETA_BUFFER_VRAM:
     EXX                            ; cambia al banco alternativo, donde SCROLL_ARRIBA/SCROLL_ABAJO dejaron las constantes de fase C/D
     LD     HL,(REGISTRO_NIVEL_POSICION_COMECOCOS)  ; HL = posicion de camara actual
